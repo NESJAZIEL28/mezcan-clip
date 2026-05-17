@@ -1,0 +1,90 @@
+name: Build MezcanClip Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Capacitor
+        run: npm install
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate release keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore ${{ github.workspace }}/release.keystore \
+            -alias mezcantv \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass MezcanTV2025 \
+            -keypass MezcanTV2025 \
+            -dname "CN=MezcanTV, OU=MezcanClip, O=MezcanTV, L=Tegucigalpa, S=FM, C=HN"
+
+      - name: Build Release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/release.keystore \
+            -Pandroid.injected.signing.store.password=MezcanTV2025 \
+            -Pandroid.injected.signing.key.alias=mezcantv \
+            -Pandroid.injected.signing.key.password=MezcanTV2025
+
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk output/MezcanClip-v1.0.0.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MezcanClip-APK
+          path: output/MezcanClip-v1.0.0.apk
+          retention-days: 90
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "MezcanClip v1.0.0 - Android APK"
+          body: |
+            ## MezcanClip para Android
+
+            Aplicacion de videos MezcanClip empaquetada como APK nativo.
+
+            ### Instalacion:
+            1. Descarga **MezcanClip-v1.0.0.apk**
+            2. En Android: Ajustes > Seguridad > Instalar apps desconocidas > Activar
+            3. Abre el APK e instala
+            4. Inicia sesion con tus credenciales MezcanTV
+
+            ### Requisitos:
+            - Android 7.0 o superior
+            - Conexion a internet requerida
+          files: output/MezcanClip-v1.0.0.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
